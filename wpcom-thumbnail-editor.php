@@ -164,8 +164,13 @@ class WPcom_Thumbnail_Editor {
 
 		$html = '<p class="hide-if-js">' . __( 'You need to enable Javascript to use this functionality.', 'wpcom-thumbnail-editor' ) . '</p>';
 
-		$html .= '<input type="button" class="hide-if-no-js button" onclick="jQuery(this).hide();jQuery(\'#' . esc_js( 'wpcom-thumbs-' . $attachment->ID ) . '\').slideDown(\'slow\');" value="' . __( 'Show Thumbnails', 'wpcom-thumbnail-editor' ) . '" />';
+		$html .= sprintf(
+			'<a class="hide-if-no-js button" href="%1$s" target="_blank">%2$s</a>',
+			esc_url( admin_url( 'admin.php?action=wpcom_thumbnail_edit&id=' . intval( $attachment->ID ) ) ),
+			esc_html__( 'Edit Thumbnails', 'wpcom-thumbnail-editor' )
+		);
 
+		/*
 		$html .= '<div id="' . esc_attr( 'wpcom-thumbs-' . $attachment->ID ) . '" class="hidden">';
 
 			$html .= '<p>' . __( 'Click on a thumbnail image to modify it. Each thumbnail has likely been scaled down in order to fit nicely into a grid.<br /><strong>Only thumbnails that are cropped are shown.</strong> Other sizes are hidden because they will be scaled to fit.', 'wpcom-thumbnail-editor' ) . '</p>';
@@ -213,6 +218,7 @@ class WPcom_Thumbnail_Editor {
 
 			$html .= '</div>';
 		$html .= '</div>';
+		*/
 
 		return $html;
 	}
@@ -223,89 +229,92 @@ class WPcom_Thumbnail_Editor {
 	public function edit_thumbnail_screen() {
 		global $parent_file, $submenu_file, $title;
 
-		// Validate "id" and "size" query string values and check user capabilities. Dies on error.
-		$attachment = $this->validate_parameters();
-
-		$size = $_REQUEST['size']; // Validated in this::validate_parameters()
-
-		// Make sure the image fits on the screen
-		if ( ! $image = image_downsize( $attachment->ID, array( 1024, 1024 ) ) )
-			wp_die( __( 'Failed to downsize the original image to fit on your screen. How odd. Please contact support.', 'wpcom-thumbnail-editor' ) );
-
-		// How big is the final thumbnail image?
-		if ( ! $thumbnail_dimensions = $this->get_thumbnail_dimensions( $size ) )
-			wp_die( sprintf( __( 'Invalid %s parameter.', 'wpcom-thumbnail-editor' ), '<code>size</code>' ) );
-
-
+		// Set the activate menu items.
 		$parent_file = 'upload.php';
 		$submenu_file = 'upload.php';
 
-		// adjust the image name if were using a ratio map
-		$image_name = isset( $_REQUEST['ratio'] ) ? $_REQUEST['ratio'] : $size;
+		// Validate "id" and "size" query string values and check user capabilities. Dies on error.
+		$attachment = $this->validate_parameters();
 
-		$title = sprintf( __( 'Edit Thumbnail: %s', 'wpcom-thumbnail-editor' ), $image_name );
+		// Make sure the image fits on the screen
+		if ( ! $image = image_downsize( $attachment->ID, array( 1024, 1024 ) ) ) {
+			wp_die( __( 'Failed to downsize the original image to fit on your screen. How odd. Please contact support.', 'wpcom-thumbnail-editor' ) );
+		}
+
+		$original_aspect_ratio = $image[1] / $image[2];
 
 		wp_enqueue_script( 'imgareaselect' );
 		wp_enqueue_style( 'imgareaselect' );
 
-		require( ABSPATH . '/wp-admin/admin-header.php' );
+		if ( ! empty( $_REQUEST['size'] ) ) {
+			$size = $_REQUEST['size'];
 
+			// How big is the final thumbnail image?
+			if ( ! $thumbnail_dimensions = $this->get_thumbnail_dimensions( $size ) ) {
+				wp_die( sprintf( __( 'Invalid %s parameter.', 'wpcom-thumbnail-editor' ), '<code>size</code>' ) );
+			}
 
-		$original_aspect_ratio  = $image[1] / $image[2];
-		$thumbnail_aspect_ratio = $thumbnail_dimensions['width'] / $thumbnail_dimensions['height'];
+			// Build the selection coordinates
+			$thumbnail_aspect_ratio = $thumbnail_dimensions['width'] / $thumbnail_dimensions['height'];
 
+			// adjust the image name if we're using a ratio map.
+			$image_name = isset( $_REQUEST['ratio'] ) ? $_REQUEST['ratio'] : $size;
 
-		# Build the selection coordinates
+			$title = sprintf( __( 'Edit Thumbnail: %s', 'wpcom-thumbnail-editor' ), $image_name );
 
-		// If there's already a custom selection
-		if ( $coordinates = $this->get_coordinates( $attachment->ID, $size ) ) {
-			$attachment_metadata = wp_get_attachment_metadata( $attachment->ID );
+			// If there's already a custom selection
+			if ( $coordinates = $this->get_coordinates( $attachment->ID, $size ) ) {
+				$attachment_metadata = wp_get_attachment_metadata( $attachment->ID );
 
-			// If original is bigger than display, scale down the coordinates to match the scaled down original
-			if ( $attachment_metadata['width'] > $image[1] || $attachment_metadata['height'] > $image[2] ) {
+				// If original is bigger than display, scale down the coordinates to match the scaled down original
+				if ( $attachment_metadata['width'] > $image[1] || $attachment_metadata['height'] > $image[2] ) {
 
-				// At what percentage is the image being displayed at?
-				$scale = $image[1] / $attachment_metadata['width'];
+					// At what percentage is the image being displayed at?
+					$scale = $image[1] / $attachment_metadata['width'];
 
-				foreach ( $coordinates as $coordinate ) {
-					$initial_selection[] = round( $coordinate * $scale );
+					foreach ( $coordinates as $coordinate ) {
+						$initial_selection[] = round( $coordinate * $scale );
+					}
+				}
+
+				// Or the image was not downscaled, so the coordinates are correct
+				else {
+					$initial_selection = $coordinates;
 				}
 			}
-
-			// Or the image was not downscaled, so the coordinates are correct
-			else {
-				$initial_selection = $coordinates;
+			// If original and thumb are the same aspect ratio, then select the whole image
+			elseif ( $thumbnail_aspect_ratio == $original_aspect_ratio ) {
+				$initial_selection = array( 0, 0, $image[1], $image[2] );
 			}
-		}
-		// If original and thumb are the same aspect ratio, then select the whole image
-		elseif ( $thumbnail_aspect_ratio == $original_aspect_ratio ) {
-			$initial_selection = array( 0, 0, $image[1], $image[2] );
-		}
-		// If the thumbnail is wider than the original, we want the full width
-		elseif ( $thumbnail_aspect_ratio > $original_aspect_ratio ) {
-			// Take the width and divide by the thumbnail's aspect ratio
-			$selected_height = round( $image[1] / ( $thumbnail_dimensions['width'] / $thumbnail_dimensions['height'] ) );
+			// If the thumbnail is wider than the original, we want the full width
+			elseif ( $thumbnail_aspect_ratio > $original_aspect_ratio ) {
+				// Take the width and divide by the thumbnail's aspect ratio
+				$selected_height = round( $image[1] / ( $thumbnail_dimensions['width'] / $thumbnail_dimensions['height'] ) );
 
-			$initial_selection = array(
-				0,                                                     // Far left edge (due to aspect ratio comparison)
-				round( ( $image[2] / 2 ) - ( $selected_height / 2 ) ), // Mid-point + half of height of selection
-				$image[1],                                             // Far right edge (due to aspect ratio comparison)
-				round( ( $image[2] / 2 ) + ( $selected_height / 2 ) ), // Mid-point - half of height of selection
-			);
-		}
-		// The thumbnail must be narrower than the original, so we want the full height
-		else {
-			// Take the width and divide by the thumbnail's aspect ratio
-			$selected_width = round( $image[2] / ( $thumbnail_dimensions['height'] / $thumbnail_dimensions['width'] ) );
+				$initial_selection = array(
+					0,                                                     // Far left edge (due to aspect ratio comparison)
+					round( ( $image[2] / 2 ) - ( $selected_height / 2 ) ), // Mid-point + half of height of selection
+					$image[1],                                             // Far right edge (due to aspect ratio comparison)
+					round( ( $image[2] / 2 ) + ( $selected_height / 2 ) ), // Mid-point - half of height of selection
+				);
+			}
+			// The thumbnail must be narrower than the original, so we want the full height
+			else {
+				// Take the width and divide by the thumbnail's aspect ratio
+				$selected_width = round( $image[2] / ( $thumbnail_dimensions['height'] / $thumbnail_dimensions['width'] ) );
 
-			$initial_selection = array(
-				round( ( $image[1] / 2 ) - ( $selected_width / 2 ) ), // Mid-point + half of height of selection
-				0,                                                    // Top edge (due to aspect ratio comparison)
-				round( ( $image[1] / 2 ) + ( $selected_width / 2 ) ), // Mid-point - half of height of selection
-				$image[2],                                            // Bottom edge (due to aspect ratio comparison)
-			);
+				$initial_selection = array(
+					round( ( $image[1] / 2 ) - ( $selected_width / 2 ) ), // Mid-point + half of height of selection
+					0,                                                    // Top edge (due to aspect ratio comparison)
+					round( ( $image[1] / 2 ) + ( $selected_width / 2 ) ), // Mid-point - half of height of selection
+					$image[2],                                            // Bottom edge (due to aspect ratio comparison)
+				);
+			}
+		} else {
+			$size = null;
 		}
 
+		require( ABSPATH . '/wp-admin/admin-header.php' );
 ?>
 
 <div class="wrap">
@@ -316,8 +325,9 @@ class WPcom_Thumbnail_Editor {
 
 		<noscript><p><strong style="color:red;font-size:20px;"><?php esc_html_e( 'Please enable Javascript to use this page.', 'wpcom-thumbnail-editor' ); ?></strong></p></noscript>
 
-		<p><?php esc_html_e( 'The original image is shown in full below, although it may have been shrunk to fit on your screen. Please select the portion that you would like to use as the thumbnail image.', 'wpcom-thumbnail-editor' ); ?></p>
+		<p><?php esc_html_e( 'The original image is shown in full below, although it may have been shrunk to fit on your screen.', 'wpcom-thumbnail-editor' ); ?></p>
 
+		<?php /*
 		<script type="text/javascript">
 			jQuery(document).ready(function($){
 				<?php
@@ -327,7 +337,7 @@ class WPcom_Thumbnail_Editor {
 				 * document.ready, so we're deferring our code using an additional jQuery
 				 * wrapper. This should catch the majority of conflicts.
 				 * @see https://github.com/Automattic/wpcom-thumbnail-editor/issues/5
-				 */
+				 * /
 				?>
 				$( function() {
 					function update_preview ( img, selection ) {
@@ -381,8 +391,9 @@ class WPcom_Thumbnail_Editor {
 				});
 			});
 		</script>
+		*/ ?>
 
-		<p><img src="<?php echo esc_url( $image[0] ); ?>" width="<?php echo (int) $image[1]; ?>" height="<?php echo (int) $image[2]; ?>" id="wpcom-thumbnail-edit" alt="<?php esc_attr( sprintf( __( '"%s" Thumbnail', 'wpcom-thumbnail-editor' ), $size ) ); ?>" /></p>
+		<p><img src="<?php echo esc_url( $image[0] ); ?>" width="<?php echo (int) $image[1]; ?>" height="<?php echo (int) $image[2]; ?>" id="wpcom-thumbnail-edit" alt="<?php esc_attr_e( 'Image cropping region', 'wpcom-thumbnail-editor' ); ?>" /></p>
 
 		<?php do_action( 'wpcom_thumbnail_editor_edit_thumbnail_screen', $attachment->ID, $size ) ?>
 
@@ -391,30 +402,40 @@ class WPcom_Thumbnail_Editor {
 			<?php submit_button( __( 'Reset Thumbnail', 'wpcom-thumbnail-editor' ), 'primary', 'wpcom_thumbnail_edit_reset', false ); ?>
 			<a href="<?php echo esc_url( admin_url( 'media.php?action=edit&attachment_id=' . $attachment->ID ) ); ?>" class="button"><?php _e( 'Cancel Changes', 'wpcom-thumbnail-editor' ); ?></a>
 		</p>
-
+		<?php
+		/*
 		<h3><?php esc_html_e( 'Fullsize Thumbnail Preview', 'wpcom-thumbnail-editor' ); ?></h3>
 
 		<div style="overflow:hidden;width:<?php echo (int) $thumbnail_dimensions['width']; ?>px;height:<?php echo (int) $thumbnail_dimensions['height']; ?>px;">
 			<img id="wpcom-thumbnail-edit-preview" class="hidden" src="<?php echo esc_url( wp_get_attachment_url( $attachment->ID ) ); ?>" />
 		</div>
+		*/
+		?>
 
 		<input type="hidden" name="action" value="wpcom_thumbnail_edit" />
 		<input type="hidden" name="id" value="<?php echo (int) $attachment->ID; ?>" />
 		<input type="hidden" name="size" value="<?php echo esc_attr( $size ); ?>" />
-		<?php wp_nonce_field( 'wpcom_thumbnail_edit_' . $attachment->ID . '_' . $size ); ?>
+		<?php wp_nonce_field( 'wpcom_thumbnail_edit_' . $attachment->ID ); ?>
 
-		<!--
-			Since the fullsize image is possibly scaled down, we need to record at what size it was
-			displayed at so the we can scale up the new selection dimensions to the fullsize image.
-		-->
-		<input type="hidden" name="wpcom_thumbnail_edit_display_width"  value="<?php echo (int) $image[1]; ?>" />
-		<input type="hidden" name="wpcom_thumbnail_edit_display_height" value="<?php echo (int) $image[2]; ?>" />
+		<?php
+		/**
+		 * Since the fullsize image is possibly scaled down, we need to record
+		 * at what size it was displayed at so the we can scale up the new
+		 * selection dimensions to the fullsize image.
+		 */
+		?>
+		<input type="hidden" name="wpcom_thumbnail_edit_display_width"  value="<?php echo intval( $image[1] ); ?>" />
+		<input type="hidden" name="wpcom_thumbnail_edit_display_height" value="<?php echo intval( $image[2] ); ?>" />
 
-		<!-- These are manipulated via Javascript to submit the selected values -->
-		<input type="hidden" name="wpcom_thumbnail_edit_x1" value="<?php echo (int) $initial_selection[0]; ?>" />
-		<input type="hidden" name="wpcom_thumbnail_edit_y1" value="<?php echo (int) $initial_selection[1]; ?>" />
-		<input type="hidden" name="wpcom_thumbnail_edit_x2" value="<?php echo (int) $initial_selection[2]; ?>" />
-		<input type="hidden" name="wpcom_thumbnail_edit_y2" value="<?php echo (int) $initial_selection[3]; ?>" />
+		<?php
+		/**
+		 * These are manipulated via Javascript to submit the selected values.
+		 */
+		?>
+		<input type="hidden" name="wpcom_thumbnail_edit_x1" value="" /> <?php // was: <?php echo (int) $initial_selection[0]; ?>
+		<input type="hidden" name="wpcom_thumbnail_edit_y1" value="" /> <?php // was: <?php echo (int) $initial_selection[1]; ?>
+		<input type="hidden" name="wpcom_thumbnail_edit_x2" value="" /> <?php // was: <?php echo (int) $initial_selection[2]; ?>
+		<input type="hidden" name="wpcom_thumbnail_edit_y2" value="" /> <?php // was: <?php echo (int) $initial_selection[3]; ?>
 	</form>
 </div>
 
@@ -433,7 +454,7 @@ class WPcom_Thumbnail_Editor {
 
 		$size = $_REQUEST['size']; // Validated in this::validate_parameters()
 
-		check_admin_referer( 'wpcom_thumbnail_edit_' . $attachment->ID . '_' . $size );
+		check_admin_referer( 'wpcom_thumbnail_edit_' . $attachment->ID );
 
 		// Reset to default?
 		if ( ! empty( $_POST['wpcom_thumbnail_edit_reset'] ) ) {
@@ -505,13 +526,15 @@ class WPcom_Thumbnail_Editor {
 		if ( ! current_user_can( get_post_type_object( $attachment->post_type )->cap->edit_post, $attachment->ID ) )
 			wp_die( __( 'You are not allowed to edit this attachment.' ) );
 
-
-		if ( $this->use_ratio_map ) {
-			if ( empty( $_REQUEST['size'] ) || ! in_array( $_REQUEST['size'], $this->get_image_sizes_by_ratio() ) )
-				wp_die( sprintf( __( 'Invalid %s parameter.', 'wpcom-thumbnail-editor' ), '<code>size</code>' ) );
-		} else {
-			if ( empty( $_REQUEST['size'] ) || ! in_array( $_REQUEST['size'], $this->get_intermediate_image_sizes() ) )
-				wp_die( sprintf( __( 'Invalid %s parameter.', 'wpcom-thumbnail-editor' ), '<code>size</code>' ) );
+		// Validate `size` if present.
+		if ( ! empty( $_REQUEST['size'] ) ) {
+			if ( $this->use_ratio_map ) {
+				if ( ! in_array( $_REQUEST['size'], $this->get_image_sizes_by_ratio() ) )
+					wp_die( sprintf( __( 'Invalid %s parameter.', 'wpcom-thumbnail-editor' ), '<code>size</code>' ) );
+			} else {
+				if ( ! in_array( $_REQUEST['size'], $this->get_intermediate_image_sizes() ) )
+					wp_die( sprintf( __( 'Invalid %s parameter.', 'wpcom-thumbnail-editor' ), '<code>size</code>' ) );
+			}
 		}
 
 		return $attachment;
