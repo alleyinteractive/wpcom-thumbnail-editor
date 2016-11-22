@@ -69,7 +69,33 @@ jQuery( function( $ ) {
 			height: thumbnailDimensions[1] + 'px'
 		});
 
-		$('#wpcom-thumbnail-edit-preview').show();
+		$( '#wpcom-thumbnail-edit-preview' ).show();
 		$( '#wpcom-thumbnail-edit-preview-container' ).fadeIn();
+
+		$( '#wpcom-thumbnail-size' ).val( $( this ).data( 'size' ) );
+	});
+
+	$( '.wpcom-thumbnail-save' ).click( function( e ) {
+		e.preventDefault();
+		$.post( wpcomThumbnailEditor.ajaxUrl, $( this ).closest( 'form' ).serialize() )
+			.done( function( response ) {
+				console.log( response );
+				var $thumb = $( '#wpcom-thumbnail-size-' + response.data.size );
+				if ( $thumb.length ) {
+					$thumb.data( 'selection', response.data.selection );
+					$( 'img', $thumb ).attr( 'src', response.data.thumbnail );
+				}
+				alert( response.data.message );
+			})
+			.fail( function( jqXHR, textStatus, errorThrown ) {
+				alert( 'Error!' );
+				console.log( jqXHR );
+				console.log( textStatus );
+				console.log( errorThrown );
+			});
+	});
+
+	$( '#wpcom-thumbnail-cancel' ).click( function( e ) {
+		console.log( 'Cancel' );
 	});
 });

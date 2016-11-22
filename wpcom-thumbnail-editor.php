@@ -49,26 +49,22 @@ class WPcom_Thumbnail_Editor {
 		// When a thumbnail is requested, intercept the request and return the custom thumbnail
 		if ( ! function_exists( 'is_private_blog' ) || ( function_exists( 'is_private_blog' )
 			&& ( ! is_private_blog() || true === $this->allow_private_blogs ) ) ) {
-			add_filter( 'image_downsize', array( &$this, 'get_thumbnail_url' ), 15, 3 );
+			add_filter( 'image_downsize', array( $this, 'get_thumbnail_url' ), 15, 3 );
 		}
 
 		// Admin-only hooks
 		if ( is_admin() ) {
 
 			// Add a new field to the edit attachment screen
-			add_filter( 'attachment_fields_to_edit', array( &$this, 'add_attachment_fields_to_edit' ), 50, 2 );
+			add_filter( 'attachment_fields_to_edit', array( $this, 'add_attachment_fields_to_edit' ), 50, 2 );
 
 			// Create a new screen for editing a thumbnail
-			add_action( 'admin_action_wpcom_thumbnail_edit', array( &$this, 'edit_thumbnail_screen' ) );
+			add_action( 'admin_action_wpcom_thumbnail_edit', array( $this, 'edit_thumbnail_screen' ) );
 
 			// Handle the form submit of the edit thumbnail screen
-			add_action( 'admin_post_wpcom_thumbnail_edit', array( &$this, 'post_handler' ) );
+			add_action( 'wp_ajax_wpcom_thumbnail_edit', array( $this, 'post_handler' ) );
 
-			// Display status messages
-			if ( ! empty( $_GET['wtereset'] ) || ! empty( $_GET['wteupdated'] ) )
-				add_action( 'admin_notices', array( &$this, 'output_thumbnail_message' ) );
-
-			add_action( 'admin_notices', array( &$this, 'jetpack_photon_url_message' ) );
+			add_action( 'admin_notices', array( $this, 'jetpack_photon_url_message' ) );
 		}
 
 		// using a global for now, maybe these values could be set in constructor in future?
@@ -90,22 +86,6 @@ class WPcom_Thumbnail_Editor {
 			}
 			$this->image_ratio_map = $ratio_map;
 		}
-	}
-
-	/**
-	 * Outputs status messages based on query parameters.
-	 *
-	 * It cheats a little and uses the settings error API in order to avoid having to generate it's own HTML.
-	 */
-	public function output_thumbnail_message() {
-		if ( ! empty( $_GET['wtereset'] ) )
-			add_settings_error( 'wpcom_thumbnail_edit', 'reset', __( 'Thumbnail position reset.', 'wpcom-thumbnail-editor' ), 'updated' );
-		elseif ( ! empty( $_GET['wteupdated'] ) )
-			add_settings_error( 'wpcom_thumbnail_edit', 'updated', __( 'Thumbnail position updated.', 'wpcom-thumbnail-editor' ), 'updated' );
-		else
-			return;
-
-		settings_errors( 'wpcom_thumbnail_edit' );
 	}
 
 	/**
@@ -200,6 +180,7 @@ class WPcom_Thumbnail_Editor {
 		wp_localize_script( 'wpcom-thumbnail-editor-js', 'wpcomThumbnailEditor', array(
 			'imgWidth' => $image[1],
 			'imgHeight' => $image[2],
+			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 		) );
 
 		// Get all the image sizes.
@@ -219,20 +200,8 @@ class WPcom_Thumbnail_Editor {
 			$image_name = $this->use_ratio_map ? $key : $size;
 			$image_name = apply_filters( 'wpcom_thumbnail_editor_image_name', $image_name, $key, $size, $this->use_ratio_map );
 
-			// We need to get the fullsize thumbnail so that the cropping is
-			// properly done.
-			$nav_thumbnail = image_downsize( $attachment->ID, $size );
-
-			// Resize the thumbnail to fit into a small box so it's displayed at
-			// a reasonable size.
-			if ( function_exists( 'jetpack_photon_url' ) ) {
-				$nav_thumbnail_url = jetpack_photon_url(
-					$nav_thumbnail[0],
-					apply_filters( 'wpcom_thumbnail_editor_preview_args', array( 'fit' => array( 250, 250 ) ), $attachment->ID, $size )
-				);
-			} else {
-				$nav_thumbnail_url = $nav_thumbnail[0];
-			}
+			// Get the thumbnail URL for the crops nav.
+			$nav_thumbnail_url = $this->get_nav_thumbnail_url( $attachment->ID, $size );
 
 			// Build the selection coordinates.
 			$aspect_ratio = $thumbnail_dimensions['width'] / $thumbnail_dimensions['height'];
@@ -292,7 +261,7 @@ class WPcom_Thumbnail_Editor {
 				);
 			}
 
-			$sizes_data[ $image_name ] = compact( 'nav_thumbnail_url', 'aspect_ratio_string', 'selection' );
+			$sizes_data[ $image_name ] = compact( 'size', 'nav_thumbnail_url', 'aspect_ratio_string', 'selection' );
 		}
 
 		require( ABSPATH . '/wp-admin/admin-header.php' );
@@ -311,9 +280,9 @@ class WPcom_Thumbnail_Editor {
 		<?php do_action( 'wpcom_thumbnail_editor_edit_thumbnail_screen', $attachment->ID, $size ) ?>
 
 		<p id="wpcom-thumbnail-actions">
-			<?php submit_button( null, 'primary', 'submit', false ); ?>
-			<?php submit_button( __( 'Reset Thumbnail', 'wpcom-thumbnail-editor' ), 'primary', 'wpcom_thumbnail_edit_reset', false ); ?>
-			<a href="<?php echo esc_url( admin_url( 'media.php?action=edit&attachment_id=' . $attachment->ID ) ); ?>" class="button"><?php _e( 'Cancel Changes', 'wpcom-thumbnail-editor' ); ?></a>
+			<?php submit_button( null, 'primary wpcom-thumbnail-save', 'submit', false ); ?>
+			<?php submit_button( __( 'Reset Thumbnail', 'wpcom-thumbnail-editor' ), 'secondary wpcom-thumbnail-save', 'wpcom_thumbnail_edit_reset', false ); ?>
+			<a href="#" class="button button-secondary" id="wpcom-thumbnail-cancel"><?php esc_html_e( 'Cancel Changes', 'wpcom-thumbnail-editor' ); ?></a>
 		</p>
 
 		<div id="wpcom-thumbnail-edit-preview-container">
@@ -326,7 +295,7 @@ class WPcom_Thumbnail_Editor {
 
 		<input type="hidden" name="action" value="wpcom_thumbnail_edit" />
 		<input type="hidden" name="id" value="<?php echo (int) $attachment->ID; ?>" />
-		<input type="hidden" name="size" value="<?php echo esc_attr( $size ); ?>" />
+		<input type="hidden" name="size" value="" id="wpcom-thumbnail-size" />
 		<?php wp_nonce_field( 'wpcom_thumbnail_edit_' . $attachment->ID ); ?>
 
 		<?php
@@ -355,7 +324,13 @@ class WPcom_Thumbnail_Editor {
 		<p><?php printf( esc_html__( '%1$sOnly thumbnails that are cropped are shown.%2$s Other sizes are hidden because they will be scaled to fit.', 'wpcom-thumbnail-editor' ), '<strong>', '</strong>' ) ?></p>
 
 		<?php foreach ( $sizes_data as $image_name => $image_data ) : ?>
-			<a class="wpcom-thumbnail-size wpcom-thumbnail-crop-activate" href="#wpcom-thumbnail-edit" data-selection="<?php echo esc_attr( implode( ',', $image_data['selection'] ) ) ?>" data-ratio="<?php echo esc_attr( $image_data['aspect_ratio_string'] ); ?>">
+			<a href="#wpcom-thumbnail-edit"
+				class="wpcom-thumbnail-size wpcom-thumbnail-crop-activate"
+				data-selection="<?php echo esc_attr( implode( ',', $image_data['selection'] ) ) ?>"
+				data-ratio="<?php echo esc_attr( $image_data['aspect_ratio_string'] ); ?>"
+				data-size="<?php echo esc_attr( $image_data['size'] ); ?>"
+				id="wpcom-thumbnail-size-<?php echo esc_attr( $image_data['size'] ); ?>"
+			>
 				<strong><?php echo esc_html( $image_name ) ?></strong>
 				<img src="<?php echo esc_url( $image_data['nav_thumbnail_url'] ); ?>" alt="<?php echo esc_attr( $image_name ) ?>" />
 			</a>
@@ -372,9 +347,15 @@ class WPcom_Thumbnail_Editor {
 	 * Processes the submission of the thumbnail crop selection screen and saves the results to post meta.
 	 */
 	public function post_handler() {
+		// Filter the wp_die() ajax handler so we can call wp_send_json_error()
+		// in validate_parameters().
+		add_filter( 'wp_die_ajax_handler', array( $this, 'wp_die_ajax_handler' ) );
 
 		// Validate "id" and "size" POST values and check user capabilities. Dies on error.
 		$attachment = $this->validate_parameters();
+
+		// Remove the filter, let wp_die() work as normal now.
+		remove_filter( 'wp_die_ajax_handler', array( $this, 'wp_die_ajax_handler' ) );
 
 		$size = $_REQUEST['size']; // Validated in this::validate_parameters()
 
@@ -383,9 +364,9 @@ class WPcom_Thumbnail_Editor {
 		// Reset to default?
 		if ( ! empty( $_POST['wpcom_thumbnail_edit_reset'] ) ) {
 			$this->delete_coordinates( $attachment->ID, $size );
-
-			wp_safe_redirect( admin_url( 'media.php?action=edit&attachment_id=' . $attachment->ID . '&wtereset=1' ) );
-			exit();
+			wp_send_json_success( array(
+				'message' => __( 'Thumbnail position successfully reset', 'wpcom-thumbnail-editor' ),
+			) );
 		}
 
 		$required_fields = array(
@@ -398,11 +379,13 @@ class WPcom_Thumbnail_Editor {
 		);
 
 		foreach ( $required_fields as $required_field => $variable_name ) {
-			if ( empty ( $_POST[$required_field] ) && 0 != $_POST[$required_field] ) {
-				wp_die( sprintf( __( 'Invalid %s parameter.', 'wpcom-thumbnail-editor' ), '<code>' . $required_field . '</code>' ) );
+			if ( empty ( $_POST[ $required_field ] ) && 0 != $_POST[ $required_field ] ) {
+				wp_send_json_error( array(
+					'message' => sprintf( __( 'Invalid parameter: %s', 'wpcom-thumbnail-editor' ), $required_field ),
+				) );
 			}
 
-			$$variable_name = (int) $_POST[$required_field];
+			$$variable_name = intval( $_POST[ $required_field ] );
 		}
 
 		$attachment_metadata = wp_get_attachment_metadata( $attachment->ID );
@@ -430,8 +413,21 @@ class WPcom_Thumbnail_Editor {
 		// Allow for saving custom fields
 		do_action( 'wpcom_thumbnail_editor_post_handler', $attachment->ID, $size );
 
-		wp_safe_redirect( admin_url( 'media.php?action=edit&attachment_id=' . $attachment->ID . '&wteupdated=1' ) );
-		exit();
+		wp_send_json_success( array(
+			'message' => __( 'Thumbnail position successfully updated', 'wpcom-thumbnail-editor' ),
+			'thumbnail' => $this->get_nav_thumbnail_url( $attachment->ID, $size ),
+			'selection' => implode( ',', call_user_func_array( 'compact', $selection_coordinates ) ),
+			'size' => $size,
+		) );
+	}
+
+	public function wp_die_ajax_handler( $function ) {
+		return array( $this, 'wp_die_json_error' );
+	}
+
+	public function wp_die_json_error( $message, $title, $args ) {
+		remove_filter( 'wp_die_ajax_handler', array( $this, 'wp_die_ajax_handler' ) );
+		wp_send_json_error( compact( 'message' ) );
 	}
 
 	/**
@@ -448,7 +444,7 @@ class WPcom_Thumbnail_Editor {
 			wp_die( sprintf( __( 'That is not a valid image attachment.', 'wpcom-thumbnail-editor' ), '<code>id</code>' ) );
 
 		if ( ! current_user_can( get_post_type_object( $attachment->post_type )->cap->edit_post, $attachment->ID ) )
-			wp_die( __( 'You are not allowed to edit this attachment.' ) );
+			wp_die( __( 'You are not allowed to edit this attachment.', 'wpcom-thumbnail-editor' ) );
 
 		// Validate `size` if present.
 		if ( ! empty( $_REQUEST['size'] ) ) {
@@ -734,6 +730,23 @@ class WPcom_Thumbnail_Editor {
 		}
 
 		return array( $url, $thumbnail_size['width'], $thumbnail_size['height'], true );
+	}
+
+	protected function get_nav_thumbnail_url( $attachment_id, $size ) {
+		// We need to get the fullsize thumbnail so that the cropping is
+		// properly done.
+		$nav_thumbnail = image_downsize( $attachment_id, $size );
+
+		// Resize the thumbnail to fit into a small box so it's displayed at
+		// a reasonable size.
+		if ( function_exists( 'jetpack_photon_url' ) ) {
+			return jetpack_photon_url(
+				$nav_thumbnail[0],
+				apply_filters( 'wpcom_thumbnail_editor_preview_args', array( 'fit' => array( 250, 250 ) ), $attachment_id, $size )
+			);
+		} else {
+			return $nav_thumbnail[0];
+		}
 	}
 }
 
