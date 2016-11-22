@@ -101,12 +101,17 @@ jQuery( function( $ ) {
 		e.preventDefault();
 		activateSpinner();
 		giveUserFeedback( 'Saving...' );
-		$.post( wpcomThumbnailEditor.ajaxUrl, $( this ).closest( 'form' ).serialize() )
+		var formData = $( this ).closest( 'form' ).serialize();
+		if ( 'wpcom_thumbnail_edit_reset' === $( this ).attr( 'name' ) ) {
+			formData += '&wpcom_thumbnail_edit_reset=true';
+		}
+		$.post( wpcomThumbnailEditor.ajaxUrl, formData )
 			.done( function( response ) {
 				var $thumb = $( '#wpcom-thumbnail-size-' + response.data.size );
 				if ( $thumb.length ) {
 					$thumb.data( 'selection', response.data.selection );
 					$( 'img', $thumb ).attr( 'src', response.data.thumbnail );
+					$thumb.click();
 				}
 				giveUserFeedback( response.data.message, 'success' );
 			})

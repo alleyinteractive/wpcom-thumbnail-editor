@@ -171,7 +171,6 @@ class WPcom_Thumbnail_Editor {
 		if ( ! $image = image_downsize( $attachment->ID, array( 1024, 1024 ) ) ) {
 			wp_die( esc_html__( 'Failed to downsize the original image to fit on your screen. How odd. Please contact support.', 'wpcom-thumbnail-editor' ) );
 		}
-		$original_aspect_ratio = $image[1] / $image[2];
 
 		// Enqueue all the static assets.
 		$assets_dir = trailingslashit( plugins_url( '', __FILE__ ) );
@@ -190,78 +189,11 @@ class WPcom_Thumbnail_Editor {
 		// Build an array of data for each size.
 		$sizes_data = array();
 		foreach ( $sizes as $key => $size ) {
-			// How big is the final thumbnail image? Check this early so we can
-			// abort if the size isn't valid.
-			if ( ! $thumbnail_dimensions = $this->get_thumbnail_dimensions( $size ) ) {
-				continue;
-			}
-
 			// Get a name for this image, either the map name or the image size.
 			$image_name = $this->use_ratio_map ? $key : $size;
 			$image_name = apply_filters( 'wpcom_thumbnail_editor_image_name', $image_name, $key, $size, $this->use_ratio_map );
 
-			// Get the thumbnail URL for the crops nav.
-			$nav_thumbnail_url = $this->get_nav_thumbnail_url( $attachment->ID, $size );
-
-			// Build the selection coordinates.
-			$aspect_ratio = $thumbnail_dimensions['width'] / $thumbnail_dimensions['height'];
-			$aspect_ratio_string = $thumbnail_dimensions['width'] . ':' . $thumbnail_dimensions['height'];
-
-			// If there's already a custom selection, use that.
-			if ( $coordinates = $this->get_coordinates( $attachment->ID, $size ) ) {
-				$attachment_metadata = wp_get_attachment_metadata( $attachment->ID );
-
-				// If original is bigger than display, scale down the
-				// coordinates to match the scaled down original.
-				if ( $attachment_metadata['width'] > $image[1] || $attachment_metadata['height'] > $image[2] ) {
-
-					// At what percentage is the image being displayed at?
-					$scale = $image[1] / $attachment_metadata['width'];
-
-					$selection = array();
-					foreach ( $coordinates as $coordinate ) {
-						$selection[] = round( $coordinate * $scale );
-					}
-				}
-
-				// Or the image was not downscaled, so the coordinates are
-				// correct.
-				else {
-					$selection = $coordinates;
-				}
-			}
-			// If original and thumb are the same aspect ratio, then select the
-			// whole image.
-			elseif ( $aspect_ratio == $original_aspect_ratio ) {
-				$selection = array( 0, 0, $image[1], $image[2] );
-			}
-			// If the thumbnail is wider than the original, we want the full
-			// width.
-			elseif ( $aspect_ratio > $original_aspect_ratio ) {
-				// Take the width and divide by the thumbnail's aspect ratio.
-				$selected_height = round( $image[1] / ( $thumbnail_dimensions['width'] / $thumbnail_dimensions['height'] ) );
-
-				$selection = array(
-					0,                                                     // Far left edge (due to aspect ratio comparison)
-					round( ( $image[2] / 2 ) - ( $selected_height / 2 ) ), // Mid-point + half of height of selection
-					$image[1],                                             // Far right edge (due to aspect ratio comparison)
-					round( ( $image[2] / 2 ) + ( $selected_height / 2 ) ), // Mid-point - half of height of selection
-				);
-			}
-			// The thumbnail must be narrower than the original, so we want the full height
-			else {
-				// Take the width and divide by the thumbnail's aspect ratio
-				$selected_width = round( $image[2] / ( $thumbnail_dimensions['height'] / $thumbnail_dimensions['width'] ) );
-
-				$selection = array(
-					round( ( $image[1] / 2 ) - ( $selected_width / 2 ) ), // Mid-point + half of height of selection
-					0,                                                    // Top edge (due to aspect ratio comparison)
-					round( ( $image[1] / 2 ) + ( $selected_width / 2 ) ), // Mid-point - half of height of selection
-					$image[2],                                            // Bottom edge (due to aspect ratio comparison)
-				);
-			}
-
-			$sizes_data[ $image_name ] = compact( 'size', 'nav_thumbnail_url', 'aspect_ratio_string', 'selection' );
+			$sizes_data[ $image_name ] = $this->get_cropping_data_for_image( $attachment->ID, $size, $image );
 		}
 
 		require( ABSPATH . '/wp-admin/admin-header.php' );
@@ -376,9 +308,21 @@ class WPcom_Thumbnail_Editor {
 		// Reset to default?
 		if ( ! empty( $_POST['wpcom_thumbnail_edit_reset'] ) ) {
 			$this->delete_coordinates( $attachment->ID, $size );
-			wp_send_json_success( array(
-				'message' => __( 'Thumbnail position successfully reset', 'wpcom-thumbnail-editor' ),
-			) );
+
+			// Get original cropping data for this size.
+			$cropping_data = $this->get_cropping_data_for_image( $attachment->ID, $size, image_downsize( $attachment->ID, array( 1024, 1024 ) ) );
+			if ( $cropping_data ) {
+				wp_send_json_success( array(
+					'message' => __( 'Thumbnail position successfully reset', 'wpcom-thumbnail-editor' ),
+					'thumbnail' => $cropping_data['nav_thumbnail_url'],
+					'selection' => implode( ',', $cropping_data['selection'] ),
+					'size' => $size,
+				) );
+			} else {
+				wp_send_json_error( array(
+					'message' => __( 'There was an error retrieving data about the reset thumbnail, please refresh your screen and try again.', 'wpcom-thumbnail-editor' ),
+				) );
+			}
 		}
 
 		$required_fields = array(
@@ -668,11 +612,13 @@ class WPcom_Thumbnail_Editor {
 	 * @return bool False on failure (probably no such custom crop), true on success.
 	 */
 	public function delete_coordinates( $attachment_id, $size ) {
-		if ( ! $sizes = get_post_meta( $attachment_id, $this->post_meta, true ) )
+		if ( ! $sizes = get_post_meta( $attachment_id, $this->post_meta, true ) ) {
 			return false;
+		}
 
-		if ( empty( $sizes[$size] ) )
+		if ( empty( $sizes[$size] ) ) {
 			return false;
+		}
 
 		unset( $sizes[$size] );
 
@@ -759,6 +705,79 @@ class WPcom_Thumbnail_Editor {
 		} else {
 			return $nav_thumbnail[0];
 		}
+	}
+
+	protected function get_cropping_data_for_image( $attachment_id, $size, $image ) {
+		// How big is the final thumbnail image? Check this early so we can
+		// abort if the size isn't valid.
+		if ( ! $thumbnail_dimensions = $this->get_thumbnail_dimensions( $size ) ) {
+			return false;
+		}
+
+		$original_aspect_ratio = $image[1] / $image[2];
+
+		// Get the thumbnail URL for the crops nav.
+		$nav_thumbnail_url = $this->get_nav_thumbnail_url( $attachment_id, $size );
+
+		// Build the selection coordinates.
+		$aspect_ratio = $thumbnail_dimensions['width'] / $thumbnail_dimensions['height'];
+		$aspect_ratio_string = $thumbnail_dimensions['width'] . ':' . $thumbnail_dimensions['height'];
+
+		// If there's already a custom selection, use that.
+		if ( $coordinates = $this->get_coordinates( $attachment_id, $size ) ) {
+			$attachment_metadata = wp_get_attachment_metadata( $attachment_id );
+
+			// If original is bigger than display, scale down the
+			// coordinates to match the scaled down original.
+			if ( $attachment_metadata['width'] > $image[1] || $attachment_metadata['height'] > $image[2] ) {
+
+				// At what percentage is the image being displayed at?
+				$scale = $image[1] / $attachment_metadata['width'];
+
+				$selection = array();
+				foreach ( $coordinates as $coordinate ) {
+					$selection[] = round( $coordinate * $scale );
+				}
+			}
+
+			// Or the image was not downscaled, so the coordinates are
+			// correct.
+			else {
+				$selection = $coordinates;
+			}
+		}
+		// If original and thumb are the same aspect ratio, then select the
+		// whole image.
+		elseif ( $aspect_ratio == $original_aspect_ratio ) {
+			$selection = array( 0, 0, $image[1], $image[2] );
+		}
+		// If the thumbnail is wider than the original, we want the full
+		// width.
+		elseif ( $aspect_ratio > $original_aspect_ratio ) {
+			// Take the width and divide by the thumbnail's aspect ratio.
+			$selected_height = round( $image[1] / ( $thumbnail_dimensions['width'] / $thumbnail_dimensions['height'] ) );
+
+			$selection = array(
+				0,                                                     // Far left edge (due to aspect ratio comparison)
+				round( ( $image[2] / 2 ) - ( $selected_height / 2 ) ), // Mid-point + half of height of selection
+				$image[1],                                             // Far right edge (due to aspect ratio comparison)
+				round( ( $image[2] / 2 ) + ( $selected_height / 2 ) ), // Mid-point - half of height of selection
+			);
+		}
+		// The thumbnail must be narrower than the original, so we want the full height
+		else {
+			// Take the width and divide by the thumbnail's aspect ratio
+			$selected_width = round( $image[2] / ( $thumbnail_dimensions['height'] / $thumbnail_dimensions['width'] ) );
+
+			$selection = array(
+				round( ( $image[1] / 2 ) - ( $selected_width / 2 ) ), // Mid-point + half of height of selection
+				0,                                                    // Top edge (due to aspect ratio comparison)
+				round( ( $image[1] / 2 ) + ( $selected_width / 2 ) ), // Mid-point - half of height of selection
+				$image[2],                                            // Bottom edge (due to aspect ratio comparison)
+			);
+		}
+
+		return compact( 'size', 'nav_thumbnail_url', 'aspect_ratio_string', 'selection' );
 	}
 }
 
