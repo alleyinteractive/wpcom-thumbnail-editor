@@ -180,6 +180,8 @@ class WPcom_Thumbnail_Editor {
 			'imgWidth' => $image[1],
 			'imgHeight' => $image[2],
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+			'unloadConfirmation' => __( 'You have unsaved changes which will be lost, are you sure you want to proceed?', 'wpcom-thumbnail-editor' ),
+			'savingMessage' => __( 'Saving...', 'wpcom-thumbnail-editor' ),
 		) );
 
 		// Get all the image sizes.

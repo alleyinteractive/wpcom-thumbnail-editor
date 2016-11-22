@@ -1,11 +1,14 @@
 jQuery( function( $ ) {
+	var dirtySaveState = false;
 
 	function activateSpinner() {
 		$( '#wpcom-thumbnail-actions .spinner' ).addClass( 'is-active' );
 	}
+
 	function deactivateSpinner() {
 		$( '#wpcom-thumbnail-actions .spinner' ).removeClass( 'is-active' );
 	}
+
 	function giveUserFeedback( message, type ) {
 		$( '#wpcom-thumbnail-feedback' )
 			.removeClass( 'success error' )
@@ -16,6 +19,7 @@ jQuery( function( $ ) {
 		// Hide the message after 10 seconds.
 		setTimeout( hideUserFeedback, 10000 );
 	}
+
 	function hideUserFeedback() {
 		$( '#wpcom-thumbnail-feedback' ).fadeOut();
 	}
@@ -69,16 +73,35 @@ jQuery( function( $ ) {
 				$( '#wpcom_thumbnail_edit_y1' ).val( selection.y1 );
 				$( '#wpcom_thumbnail_edit_x2' ).val( selection.x2 );
 				$( '#wpcom_thumbnail_edit_y2' ).val( selection.y2 );
+				dirtySaveState = true;
+				console.log( 'onSelectEnd' );
 			}
 		});
 	}
 
+	function confirmDiscardUnsavedData( e ) {
+		if ( dirtySaveState ) {
+			if ( e ) {
+				e.returnValue = window.wpcomThumbnailEditor.unloadConfirmation;
+				return window.wpcomThumbnailEditor.unloadConfirmation;
+			} else {
+				return window.confirm( window.wpcomThumbnailEditor.unloadConfirmation );
+			}
+		}
+		return true;
+	}
+
 	$( '.wpcom-thumbnail-crop-activate' ).click( function( e ) {
+		e.preventDefault();
+
+		if ( ! confirmDiscardUnsavedData() ) {
+			return;
+		}
+
 		var ratio = $( this ).data( 'ratio' ),
 			selection = $( this ).data( 'selection' ).split( ',' ),
 			thumbnailDimensions = ratio.split( ':' );
 
-		e.preventDefault();
 		hideUserFeedback();
 		$( 'html, body' ).animate({
 			scrollTop: $( $( this ).attr( 'href' ) ).offset().top - 50
@@ -101,13 +124,14 @@ jQuery( function( $ ) {
 	$( '.wpcom-thumbnail-save' ).click( function( e ) {
 		e.preventDefault();
 		activateSpinner();
-		giveUserFeedback( 'Saving...' );
+		giveUserFeedback( window.wpcomThumbnailEditor.savingMessage );
 		var formData = $( this ).closest( 'form' ).serialize();
 		if ( 'wpcom_thumbnail_edit_reset' === $( this ).attr( 'name' ) ) {
 			formData += '&wpcom_thumbnail_edit_reset=true';
 		}
 		$.post( wpcomThumbnailEditor.ajaxUrl, formData )
 			.done( function( response ) {
+				dirtySaveState = false;
 				var $thumb = $( '#wpcom-thumbnail-size-' + response.data.size );
 				if ( $thumb.length ) {
 					$thumb.data( 'selection', response.data.selection );
@@ -132,5 +156,8 @@ jQuery( function( $ ) {
 		$( '#wpcom_thumbnail_edit_x1, #wpcom_thumbnail_edit_y1, #wpcom_thumbnail_edit_x2, #wpcom_thumbnail_edit_y2, #wpcom-thumbnail-size' ).val( '' );
 		$( '#wpcom-thumbnail-edit-preview-container' ).fadeOut();
 		$( '.wpcom-thumbnail-save' ).prop( 'disabled', true );
+		dirtySaveState = false;
 	});
+
+	window.addEventListener( 'beforeunload', confirmDiscardUnsavedData );
 });
