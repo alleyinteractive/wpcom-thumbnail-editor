@@ -1,0 +1,41 @@
+#wpcom-thumbnail-image-col {
+}
+
+#wpcom-thumbnail-sizes-col {
+}
+.wpcom-thumbnail-size {
+	display: block;
+	width: 275px;
+	height: 300px;
+	float: left;
+	outline: none;
+}
+.wpcom-thumbnail-size img {
+	max-width: 100%;
+}
+.wpcom-thumbnail-size strong {
+	display: block;
+}
+
+#wpcom-thumbnail-actions {
+
+}
+
+/* Special layout for very large screens */
+@media (min-width:1520px) {
+	#wpcom-thumbnail-image-col {
+		width: 1024px;
+		float: left;
+		margin-right: 20px;
+	}
+
+	#wpcom-thumbnail-sizes-col {
+		width: 250px;
+		float: left;
+	}
+	.wpcom-thumbnail-size {
+		display: block;
+		height: auto;
+		float: none;
+	}
+}
