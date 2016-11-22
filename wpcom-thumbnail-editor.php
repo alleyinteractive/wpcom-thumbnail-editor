@@ -315,15 +315,14 @@ class WPcom_Thumbnail_Editor {
 			<?php submit_button( __( 'Reset Thumbnail', 'wpcom-thumbnail-editor' ), 'primary', 'wpcom_thumbnail_edit_reset', false ); ?>
 			<a href="<?php echo esc_url( admin_url( 'media.php?action=edit&attachment_id=' . $attachment->ID ) ); ?>" class="button"><?php _e( 'Cancel Changes', 'wpcom-thumbnail-editor' ); ?></a>
 		</p>
-		<?php
-		/*
-		<h3><?php esc_html_e( 'Fullsize Thumbnail Preview', 'wpcom-thumbnail-editor' ); ?></h3>
 
-		<div style="overflow:hidden;width:<?php echo (int) $thumbnail_dimensions['width']; ?>px;height:<?php echo (int) $thumbnail_dimensions['height']; ?>px;">
-			<img id="wpcom-thumbnail-edit-preview" class="hidden" src="<?php echo esc_url( wp_get_attachment_url( $attachment->ID ) ); ?>" />
+		<div id="wpcom-thumbnail-edit-preview-container">
+			<h3><?php esc_html_e( 'Fullsize Thumbnail Preview', 'wpcom-thumbnail-editor' ); ?></h3>
+
+			<div id="wpcom-thumbnail-edit-preview-mask">
+				<img id="wpcom-thumbnail-edit-preview" class="hidden" src="<?php echo esc_url( wp_get_attachment_url( $attachment->ID ) ); ?>" />
+			</div>
 		</div>
-		*/
-		?>
 
 		<input type="hidden" name="action" value="wpcom_thumbnail_edit" />
 		<input type="hidden" name="id" value="<?php echo (int) $attachment->ID; ?>" />

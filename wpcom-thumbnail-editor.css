@@ -21,6 +21,13 @@
 
 }
 
+#wpcom-thumbnail-edit-preview-container {
+	display: none;
+}
+#wpcom-thumbnail-edit-preview-mask {
+	overflow: hidden;
+}
+
 /* Special layout for very large screens */
 @media (min-width:1520px) {
 	#wpcom-thumbnail-image-col {

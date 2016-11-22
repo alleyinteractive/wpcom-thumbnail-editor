@@ -18,6 +18,12 @@ jQuery( function( $ ) {
 
 	function buildImgAreaSelect( ratio, initialSelection ) {
 		var thumbnailDimensions = ratio.split( ':' );
+
+		if ( !! $( '#wpcom-thumbnail-edit' ).data('imgAreaSelect') ) {
+			// Remove and reinit.
+			$( '#wpcom-thumbnail-edit' ).imgAreaSelect( { remove: true } );
+		}
+
 		$( '#wpcom-thumbnail-edit' ).imgAreaSelect( {
 			aspectRatio: ratio,
 			handles: true,
@@ -31,7 +37,6 @@ jQuery( function( $ ) {
 			// Update the preview
 			onInit: function( img, selection ) {
 				updatePreview( selection, thumbnailDimensions );
-				$('#wpcom-thumbnail-edit-preview').show();
 			},
 			onSelectChange: function( img, selection ) {
 				updatePreview( selection, thumbnailDimensions );
@@ -49,9 +54,22 @@ jQuery( function( $ ) {
 
 	$( '.wpcom-thumbnail-crop-activate' ).click( function( e ) {
 		e.preventDefault();
-		$('html, body').animate({
+		var ratio = $( this ).data( 'ratio' ),
+			selection = $( this ).data( 'selection' ).split( ',' ),
+			thumbnailDimensions = ratio.split( ':' );
+
+		$( 'html, body' ).animate({
 			scrollTop: $( $( this ).attr( 'href' ) ).offset().top - 50
 		}, 750);
-		buildImgAreaSelect( $( this ).data( 'ratio' ), $( this ).data( 'selection' ).split( ',' ) );
+
+		buildImgAreaSelect( ratio, selection );
+
+		$( '#wpcom-thumbnail-edit-preview-mask' ).css( {
+			width: thumbnailDimensions[0] + 'px',
+			height: thumbnailDimensions[1] + 'px'
+		});
+
+		$('#wpcom-thumbnail-edit-preview').show();
+		$( '#wpcom-thumbnail-edit-preview-container' ).fadeIn();
 	});
 });
