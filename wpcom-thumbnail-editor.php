@@ -214,8 +214,8 @@ class WPcom_Thumbnail_Editor {
 			<?php do_action( 'wpcom_thumbnail_editor_edit_thumbnail_screen', $attachment->ID, $size ) ?>
 
 			<p id="wpcom-thumbnail-actions">
-				<?php submit_button( null, 'primary wpcom-thumbnail-save', 'submit', false ); ?>
-				<?php submit_button( __( 'Reset Thumbnail', 'wpcom-thumbnail-editor' ), 'secondary wpcom-thumbnail-save', 'wpcom_thumbnail_edit_reset', false ); ?>
+				<?php submit_button( null, 'primary wpcom-thumbnail-save', 'submit', false, array( 'disabled' => 'disabled' ) ); ?>
+				<?php submit_button( __( 'Reset Thumbnail', 'wpcom-thumbnail-editor' ), 'secondary wpcom-thumbnail-save', 'wpcom_thumbnail_edit_reset', false, array( 'disabled' => 'disabled' ) ); ?>
 				<a href="#" class="button button-secondary" id="wpcom-thumbnail-cancel"><?php esc_html_e( 'Cancel Changes', 'wpcom-thumbnail-editor' ); ?></a>
 				<i class="spinner"></i>
 				<span id="wpcom-thumbnail-feedback"></span>
@@ -623,10 +623,10 @@ class WPcom_Thumbnail_Editor {
 		unset( $sizes[$size] );
 
 		// also unset related sizes
-		if( $this->use_ratio_map ) {
+		if ( $this->use_ratio_map ) {
 			$related_sizes = $this->get_related_sizes( $size );
-			if( count( $related_sizes ) ) {
-				foreach( $related_sizes as $related_size ){
+			if ( count( $related_sizes ) ) {
+				foreach ( $related_sizes as $related_size ){
 					unset( $sizes[$related_size] );
 				}
 			}
@@ -644,11 +644,14 @@ class WPcom_Thumbnail_Editor {
 	 * @return mixed Array of thumbnail details (URL, width, height, is_intermedite) or the previous data.
 	 */
 	public function get_thumbnail_url( $existing_resize, $attachment_id, $size ) {
-
-		//On dev sites, Jetpack is often active but Photon will not work because the content files are not accessible to the public internet.
-		//Right now, a broken image is displayed when this plugin is active and a thumbnail has been edited. This will allow the unmodified image to be displayed.
-		if( !function_exists( 'jetpack_photon_url' ) ||  defined('JETPACK_DEV_DEBUG') )
+		// On dev sites, Jetpack is often active but Photon will not work
+		// because the content files are not accessible to the public internet.
+		// Right now, a broken image is displayed when this plugin is active and
+		// a thumbnail has been edited. This will allow the unmodified image to
+		// be displayed.
+		if ( ! function_exists( 'jetpack_photon_url' ) || defined( 'JETPACK_DEV_DEBUG' ) ) {
 			return $existing_resize;
+		}
 
 		// Named sizes only
 		if ( is_array( $size ) ) {
