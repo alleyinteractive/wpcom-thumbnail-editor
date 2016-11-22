@@ -268,7 +268,7 @@ class WPcom_Thumbnail_Editor {
 ?>
 
 <div class="wrap">
-	<h2><?php echo esc_html( sprintf( __( 'Editing Crops for %s', 'wpcom-thumbnail-editor' ), get_the_title( $attachment ) ) ); ?></h2>
+	<h2><?php echo esc_html( sprintf( __( 'Editing Thumbnails for %s', 'wpcom-thumbnail-editor' ), get_the_title( $attachment ) ) ); ?></h2>
 
 	<div id="wpcom-thumbnail-columns">
 		<form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" id="wpcom-thumbnail-image-col">
