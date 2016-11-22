@@ -1,4 +1,25 @@
 jQuery( function( $ ) {
+
+	function activateSpinner() {
+		$( '#wpcom-thumbnail-actions .spinner' ).addClass( 'is-active' );
+	}
+	function deactivateSpinner() {
+		$( '#wpcom-thumbnail-actions .spinner' ).removeClass( 'is-active' );
+	}
+	function giveUserFeedback( message, type ) {
+		$( '#wpcom-thumbnail-feedback' )
+			.removeClass( 'success error' )
+			.addClass( type ? type : '' )
+			.text( message )
+			.fadeIn( 'fast' );
+
+		// Hide the message after 10 seconds.
+		setTimeout( hideUserFeedback, 10000 );
+	}
+	function hideUserFeedback() {
+		$( '#wpcom-thumbnail-feedback' ).fadeOut();
+	}
+
 	function updatePreview( selection, thumbnailDimensions ) {
 		// This is how big the selection image is
 		var imgWidth  = window.wpcomThumbnailEditor.imgWidth;
@@ -54,6 +75,7 @@ jQuery( function( $ ) {
 
 	$( '.wpcom-thumbnail-crop-activate' ).click( function( e ) {
 		e.preventDefault();
+		hideUserFeedback();
 		var ratio = $( this ).data( 'ratio' ),
 			selection = $( this ).data( 'selection' ).split( ',' ),
 			thumbnailDimensions = ratio.split( ':' );
@@ -77,22 +99,26 @@ jQuery( function( $ ) {
 
 	$( '.wpcom-thumbnail-save' ).click( function( e ) {
 		e.preventDefault();
+		activateSpinner();
+		giveUserFeedback( 'Saving...' );
 		$.post( wpcomThumbnailEditor.ajaxUrl, $( this ).closest( 'form' ).serialize() )
 			.done( function( response ) {
-				console.log( response );
 				var $thumb = $( '#wpcom-thumbnail-size-' + response.data.size );
 				if ( $thumb.length ) {
 					$thumb.data( 'selection', response.data.selection );
 					$( 'img', $thumb ).attr( 'src', response.data.thumbnail );
 				}
-				alert( response.data.message );
+				giveUserFeedback( response.data.message, 'success' );
 			})
 			.fail( function( jqXHR, textStatus, errorThrown ) {
-				alert( 'Error!' );
-				console.log( jqXHR );
-				console.log( textStatus );
-				console.log( errorThrown );
-			});
+				giveUserFeedback( 'Error! ' + textStatus, 'error' );
+				if ( console && console.log ) {
+					console.log( jqXHR );
+					console.log( textStatus );
+					console.log( errorThrown );
+				}
+			})
+			.always( deactivateSpinner );
 	});
 
 	$( '#wpcom-thumbnail-cancel' ).click( function( e ) {
