@@ -1,5 +1,5 @@
 jQuery( function( $ ) {
-	var dirtySaveState = false;
+	var feedbackTimer, dirtySaveState = false;
 
 	function activateSpinner() {
 		$( '#wpcom-thumbnail-actions .spinner' ).addClass( 'is-active' );
@@ -9,15 +9,20 @@ jQuery( function( $ ) {
 		$( '#wpcom-thumbnail-actions .spinner' ).removeClass( 'is-active' );
 	}
 
-	function giveUserFeedback( message, type ) {
+	function giveUserFeedback( message, type, autoHide ) {
+		autoHide = !! autoHide;
+		clearTimeout( feedbackTimer );
+
 		$( '#wpcom-thumbnail-feedback' )
 			.removeClass( 'success error' )
 			.addClass( type ? type : '' )
 			.text( message )
 			.fadeIn( 'fast' );
 
-		// Hide the message after 10 seconds.
-		setTimeout( hideUserFeedback, 10000 );
+		if ( autoHide ) {
+			// Hide the message after 10 seconds.
+			feedbackTimer = setTimeout( hideUserFeedback, 10000 );
+		}
 	}
 
 	function hideUserFeedback() {
@@ -102,7 +107,6 @@ jQuery( function( $ ) {
 			selection = $( this ).data( 'selection' ).split( ',' ),
 			thumbnailDimensions = ratio.split( ':' );
 
-		hideUserFeedback();
 		$( 'html, body' ).animate({
 			scrollTop: $( $( this ).attr( 'href' ) ).offset().top - 50
 		}, 750);
@@ -138,10 +142,10 @@ jQuery( function( $ ) {
 					$( 'img', $thumb ).attr( 'src', response.data.thumbnail );
 					$thumb.click();
 				}
-				giveUserFeedback( response.data.message, 'success' );
+				giveUserFeedback( response.data.message, 'success', true );
 			})
 			.fail( function( jqXHR, textStatus, errorThrown ) {
-				giveUserFeedback( 'Error! ' + textStatus, 'error' );
+				giveUserFeedback( 'Error! ' + textStatus, 'error', true );
 				if ( console && console.log ) {
 					console.log( jqXHR );
 					console.log( textStatus );
