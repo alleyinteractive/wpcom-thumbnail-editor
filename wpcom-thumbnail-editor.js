@@ -1,19 +1,25 @@
 jQuery( function( $ ) {
-	var feedbackTimer, dirtySaveState = false;
+	var feedbackTimer,
+		dirtySaveState = false,
+		$feedback = $( '#wpcom-thumbnail-feedback' ),
+		$spinner = $( '#wpcom-thumbnail-actions .spinner' ),
+		$thumbnailEditor = $( '#wpcom-thumbnail-edit' ),
+		$thumbnailPreview = $( '#wpcom-thumbnail-edit-preview' )
+		$saveButtons = $( '.wpcom-thumbnail-save' );
 
 	function activateSpinner() {
-		$( '#wpcom-thumbnail-actions .spinner' ).addClass( 'is-active' );
+		$spinner.addClass( 'is-active' );
 	}
 
 	function deactivateSpinner() {
-		$( '#wpcom-thumbnail-actions .spinner' ).removeClass( 'is-active' );
+		$spinner.removeClass( 'is-active' );
 	}
 
 	function giveUserFeedback( message, type, autoHide ) {
 		autoHide = !! autoHide;
 		clearTimeout( feedbackTimer );
 
-		$( '#wpcom-thumbnail-feedback' )
+		$feedback
 			.removeClass( 'success error' )
 			.addClass( type ? type : '' )
 			.text( message )
@@ -26,7 +32,7 @@ jQuery( function( $ ) {
 	}
 
 	function hideUserFeedback() {
-		$( '#wpcom-thumbnail-feedback' ).fadeOut();
+		$feedback.fadeOut();
 	}
 
 	function updatePreview( selection, thumbnailDimensions ) {
@@ -38,7 +44,7 @@ jQuery( function( $ ) {
 		var scaleY = thumbnailDimensions[1] / ( selection.height || 1 );
 
 		// Update the preview image
-		$( '#wpcom-thumbnail-edit-preview' ).css( {
+		$thumbnailPreview.css( {
 			width: Math.round( scaleX * imgWidth ) + 'px',
 			height: Math.round( scaleY * imgHeight ) + 'px',
 			marginLeft: '-' + Math.round( scaleX * selection.x1 ) + 'px',
@@ -49,12 +55,12 @@ jQuery( function( $ ) {
 	function buildImgAreaSelect( ratio, initialSelection ) {
 		var thumbnailDimensions = ratio.split( ':' );
 
-		if ( !! $( '#wpcom-thumbnail-edit' ).data('imgAreaSelect') ) {
+		if ( !! $thumbnailEditor.data('imgAreaSelect') ) {
 			// Remove and reinit.
-			$( '#wpcom-thumbnail-edit' ).imgAreaSelect( { remove: true } );
+			$thumbnailEditor.imgAreaSelect( { remove: true } );
 		}
 
-		$( '#wpcom-thumbnail-edit' ).imgAreaSelect( {
+		$thumbnailEditor.imgAreaSelect( {
 			aspectRatio: ratio,
 			handles: true,
 
@@ -112,20 +118,20 @@ jQuery( function( $ ) {
 		}, 750);
 
 		buildImgAreaSelect( ratio, selection );
-		$( '.wpcom-thumbnail-save' ).prop( 'disabled', false );
+		$saveButtons.prop( 'disabled', false );
 
 		$( '#wpcom-thumbnail-edit-preview-mask' ).css( {
 			width: thumbnailDimensions[0] + 'px',
 			height: thumbnailDimensions[1] + 'px'
 		});
 
-		$( '#wpcom-thumbnail-edit-preview' ).show();
+		$thumbnailPreview.show();
 		$( '#wpcom-thumbnail-edit-preview-container' ).fadeIn();
 
 		$( '#wpcom-thumbnail-size' ).val( $( this ).data( 'size' ) );
 	});
 
-	$( '.wpcom-thumbnail-save' ).click( function( e ) {
+	$saveButtons.click( function( e ) {
 		e.preventDefault();
 		activateSpinner();
 		giveUserFeedback( window.wpcomThumbnailEditor.savingMessage );
@@ -156,10 +162,10 @@ jQuery( function( $ ) {
 	});
 
 	$( '#wpcom-thumbnail-cancel' ).click( function( e ) {
-		$( '#wpcom-thumbnail-edit' ).imgAreaSelect( { remove: true } );
+		$thumbnailEditor.imgAreaSelect( { remove: true } );
 		$( '#wpcom_thumbnail_edit_x1, #wpcom_thumbnail_edit_y1, #wpcom_thumbnail_edit_x2, #wpcom_thumbnail_edit_y2, #wpcom-thumbnail-size' ).val( '' );
 		$( '#wpcom-thumbnail-edit-preview-container' ).fadeOut();
-		$( '.wpcom-thumbnail-save' ).prop( 'disabled', true );
+		$saveButtons.prop( 'disabled', true );
 		dirtySaveState = false;
 	});
 
