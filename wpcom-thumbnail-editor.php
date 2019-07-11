@@ -355,9 +355,11 @@ class WPcom_Thumbnail_Editor {
 					onInit: function ( img, selection ) {
 						update_preview( img, selection );
 						$('#wpcom-thumbnail-edit-preview').show();
+						$('#wpcom-thumbnail-edit').trigger('wpcom_thumbnail_edit_init');
 					},
 					onSelectChange: function ( img, selection ) {
 						update_preview( img, selection );
+						$('#wpcom-thumbnail-edit').trigger('wpcom_thumbnail_edit_change');
 					},
 
 					// Fill the hidden fields with the selected coordinates for the form
@@ -366,6 +368,7 @@ class WPcom_Thumbnail_Editor {
 						$('input[name="wpcom_thumbnail_edit_y1"]').val(selection.y1);
 						$('input[name="wpcom_thumbnail_edit_x2"]').val(selection.x2);
 						$('input[name="wpcom_thumbnail_edit_y2"]').val(selection.y2);
+						$('#wpcom-thumbnail-edit').trigger('wpcom_thumbnail_edit_selectend');
 					}
 				});
 			});
