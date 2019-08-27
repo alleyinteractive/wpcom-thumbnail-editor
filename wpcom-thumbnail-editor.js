@@ -73,9 +73,11 @@ jQuery( function( $ ) {
 			// Update the preview
 			onInit: function( img, selection ) {
 				updatePreview( selection, thumbnailDimensions );
+				$('#wpcom-thumbnail-edit').trigger('wpcom_thumbnail_edit_init');
 			},
 			onSelectChange: function( img, selection ) {
 				updatePreview( selection, thumbnailDimensions );
+				$('#wpcom-thumbnail-edit').trigger('wpcom_thumbnail_edit_change');
 			},
 
 			// Fill the hidden fields with the selected coordinates for the form
@@ -85,7 +87,7 @@ jQuery( function( $ ) {
 				$( '#wpcom_thumbnail_edit_x2' ).val( selection.x2 );
 				$( '#wpcom_thumbnail_edit_y2' ).val( selection.y2 );
 				dirtySaveState = true;
-				console.log( 'onSelectEnd' );
+				$('#wpcom-thumbnail-edit').trigger('wpcom_thumbnail_edit_selectend');
 			}
 		});
 	}

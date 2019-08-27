@@ -3,9 +3,10 @@
 **************************************************************************
 
 Plugin Name:  WordPress.com Thumbnail Editor
+Version:      1.0.0
 Description:  Since thumbnails are generated on-demand on WordPress.com, thumbnail cropping location must be set via the URL. This plugin assists in doing this. Based on concepts by Imran Nathani of <a href="http://metronews.ca/">Metro News Canada</a>.
 Author:       Automattic
-Author URI:   http://vip.wordpress.com/
+Author URI:   https://wpvip.com/
 
 **************************************************************************/
 
@@ -651,7 +652,7 @@ class WPcom_Thumbnail_Editor {
 		// Right now, a broken image is displayed when this plugin is active and
 		// a thumbnail has been edited. This will allow the unmodified image to
 		// be displayed.
-		if ( ! function_exists( 'jetpack_photon_url' ) || defined( 'JETPACK_DEV_DEBUG' ) ) {
+		if ( ! function_exists( 'jetpack_photon_url' ) || ( true === defined( 'JETPACK_DEV_DEBUG' ) && true === constant( 'JETPACK_DEV_DEBUG' ) ) ) {
 			return $existing_resize;
 		}
 
